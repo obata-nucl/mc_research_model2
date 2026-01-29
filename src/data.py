@@ -52,7 +52,8 @@ def get_boson_num(n: int) -> int:
 def get_casten_factor(n_pi: int, n_nu: int) -> float:
     if n_pi + n_nu == 0:
         return 0.0
-    return (n_pi * n_nu) / (n_pi + n_nu)
+    # P = (Np * Nn) / (Np + Nn) where N are valence nucleon numbers (= 2 * boson numbers)
+    return 2.0 * (n_pi * n_nu) / (n_pi + n_nu)
 
 def _make_split_indices(X: torch.Tensor,
                         val_ratio: float,
