@@ -15,7 +15,9 @@ CONFIG = load_config()
 
 plt.rcParams["font.family"] = "serif"
 plt.rcParams["figure.dpi"] = 300
-plt.rcParams["font.size"] = 12
+plt.rcParams["font.size"] = 15
+
+HFB_COLOR = "#6A0DAD"
 
 _TRAINING_CFG = CONFIG.get("training", {})
 _BETA_MIN = _TRAINING_CFG.get("beta_min")
@@ -28,7 +30,7 @@ def _calc_PES(params: np.ndarray, n_pi: int, n_nu: int, beta_f_arr: np.ndarray) 
     beta_f_arr = np.asarray(beta_f_arr)
 
     # Convert to tensors and shape for single set calculation
-    params_tensor = torch.from_numpy(params.astype(np.float32)).unsqueeze(0)  # (1, 3)
+    params_tensor = torch.from_numpy(params.astype(np.float32)).unsqueeze(0)  # (1, 4)
     beta_f_tensor = torch.from_numpy(beta_f_arr.astype(np.float32)).unsqueeze(0)  # (1, num_beta)
     # Convert n_pi and n_nu to tensors for consistent arithmetic and broadcasting
     n_pi_tensor = beta_f_tensor.new_full(beta_f_tensor.shape, float(n_pi))
@@ -87,24 +89,23 @@ def _prepare_pes_entry(z: int, n: int, params: np.ndarray, n_pi: int, n_nu: int,
 
 
 def _plot_pes_grid(z: int, pes_entries: list[dict], save_dir: Path) -> None:
+    if not pes_entries:
+        return
+
     pes_entries.sort(key=lambda item: item["N"])
     total = len(pes_entries)
-    cols = int(np.ceil(np.sqrt(total)))
+    cols = 4
     rows = int(np.ceil(total / cols))
-    cols = max(1, cols)
     rows = max(1, rows)
 
-    base_w, base_h = 5.0, 4.0
+    base_w, base_h = 4.8, 4.4
     fig, axes = plt.subplots(rows, cols, figsize=(base_w * cols, base_h * rows), sharex=True, sharey=True)
 
-    if total == 1:
-        axes_array = np.array([[axes]])
-    elif rows == 1:
+    if rows == 1:
         axes_array = np.array([axes])
-    elif cols == 1:
-        axes_array = np.array([[ax] for ax in axes])
     else:
-        axes_array = axes
+        axes_array = np.array(axes)
+    axes_array = axes_array.reshape(rows, cols)
 
     axes_flat = axes_array.ravel()
 
@@ -115,22 +116,40 @@ def _plot_pes_grid(z: int, pes_entries: list[dict], save_dir: Path) -> None:
 
         valid_target = np.isfinite(target)
         if np.any(valid_target):
-            ax.plot(beta[valid_target], target[valid_target], linestyle="--", color="tab:orange", label="HFB PES")
+            ax.plot(beta[valid_target], target[valid_target], linestyle="--", color=HFB_COLOR, label="HFB", linewidth=2.6)
             min_target_idx = np.nanargmin(target[valid_target])
             beta_target = beta[valid_target][min_target_idx]
             energy_target = target[valid_target][min_target_idx]
-            ax.plot(beta_target, energy_target, 'bo', markersize=6)
+            ax.plot(
+                beta_target,
+                energy_target,
+                marker="o",
+                markersize=11,
+                markerfacecolor="white",
+                markeredgecolor=HFB_COLOR,
+                markeredgewidth=2.4,
+                zorder=5,
+            )
 
-        ax.plot(beta, pred, linestyle="-", color="black", label="IBM PES")
+        ax.plot(beta, pred, linestyle="-", color="black", label="IBM-2", linewidth=2.6)
         min_pred_idx = np.nanargmin(pred)
-        ax.plot(beta[min_pred_idx], pred[min_pred_idx], 'ro', markersize=6)
+        ax.plot(
+            beta[min_pred_idx],
+            pred[min_pred_idx],
+            marker="o",
+            markersize=10,
+            markerfacecolor="red",
+            markeredgecolor="black",
+            markeredgewidth=1.2,
+            zorder=6,
+        )
 
         mass_number = entry["Z"] + entry["N"]
         symbol = entry["element"]
-        ax.set_title(rf"$^{{{mass_number}}}\mathrm{{{symbol}}}$", fontsize=18)
-        ax.tick_params(axis="both", which="major", labelsize=12)
+        ax.set_title(rf"$^{{{mass_number}}}\mathrm{{{symbol}}}$", fontsize=22)
+        ax.tick_params(axis="both", which="major", labelsize=16, width=1.4)
         if idx == 0:
-            ax.legend(loc="best", fontsize=12)
+            ax.legend(loc="best", fontsize=13)
 
     for ax in axes_flat[total:]:
         ax.axis('off')
@@ -138,14 +157,14 @@ def _plot_pes_grid(z: int, pes_entries: list[dict], save_dir: Path) -> None:
     for ax in axes_array[-1, :]:
         if not ax.get_visible():
             continue
-        ax.set_xlabel(r"$\beta$", fontsize=14)
+        ax.set_xlabel(r"$\beta$", fontsize=18)
     for ax in axes_array[:, 0]:
         if not ax.get_visible():
             continue
-        ax.set_ylabel("Energy [MeV]", fontsize=14)
+        ax.set_ylabel("Energy [MeV]", fontsize=18)
 
     fig.tight_layout()
-    save_fig(fig, "PES", save_dir)
+    save_fig(fig, "PES_all", save_dir)
 
 def main():
     # beta_f_arr is no longer fixed globally, but determined per nucleus based on expt data
@@ -158,7 +177,7 @@ def main():
         CONFIG["nuclei"]["n_step"]
     )
     for pattern_name, pred_data in load_eval_results().items():
-        # pred_data: [N, Z, E2, E4, E6, E0, R, eps, kappa, chi_n]
+        # pred_data: [N, Z, E2, E4, E6, E0, R, eps, kappa, chi_pi, chi_n]
         unique_Zs = np.unique(pred_data[:, 1].astype(int))
         
         for z in unique_Zs:
