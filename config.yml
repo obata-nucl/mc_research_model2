@@ -22,6 +22,8 @@ nuclei:
   n_step: 2
   magic_numbers: [2, 8, 20, 28, 50, 82, 126]
 
+  fixed_C_beta: 4.0
+
 # -----------------
 # 3. NN model settings
 # -----------------
