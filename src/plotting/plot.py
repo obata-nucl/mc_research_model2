@@ -17,13 +17,13 @@ plt.rcParams["font.size"] = 12
 # eval_results = ["N", "E2+_1", "E4+_1", "E6+_1", "E0+_2", "R_4/2", "eps", "kappa", "chi_n"]
 # expt_spectra = {(p, n), np.ndarray}
 
-def _spectra_panel_labels(c_beta: float | None) -> tuple[str, str]:
-    if c_beta is None:
-        left = "(a) IBM-2"
-    else:
-        left = rf"(a) IBM-2 ($C_{{\beta}}={float(c_beta):.1f}$)"
-    right = "(b) Expt."
-    return left, right
+def _spectra_panel_labels(z: int) -> tuple[str, str]:
+    mapping = {
+        60: ("(a) IBM-2", "(b) Expt."),
+        62: ("(c) IBM-2", "(d) Expt."),
+        64: ("(d) IBM-2", "(e) Expt."),
+    }
+    return mapping.get(int(z), ("(a) IBM-2", "(b) Expt."))
 
 
 def _z_panel_label(z: int) -> str | None:
@@ -35,8 +35,8 @@ def _z_panel_label(z: int) -> str | None:
     return mapping.get(int(z))
 
 
-def _plot_spectra(pred_data: np.ndarray, expt_data: dict[tuple[int, int], np.ndarray], c_beta: float | None = None, level_labels: list[str] = ["2+_1", "4+_1", "6+_1", "0+_2"], markers: list[str] = ['o', 's', '^', 'D']) -> tuple[plt.Figure, float]:
-    fig, ax = plt.subplots(1, 2, figsize=(12, 5.2), sharey=False)
+def _plot_spectra(pred_data: np.ndarray, expt_data: dict[tuple[int, int], np.ndarray], z: int | None = None, level_labels: list[str] = ["2+_1", "4+_1", "6+_1", "0+_2"], markers: list[str] = ['o', 's', '^', 'D']) -> tuple[plt.Figure, float]:
+    fig, ax = plt.subplots(1, 2, figsize=(12, 5.2), sharey=True, gridspec_kw={"wspace": 0.0})
     expt_keys = list(expt_data.keys())
     expt_energies = np.array([expt_data[key] for key in expt_keys])
 
@@ -48,13 +48,13 @@ def _plot_spectra(pred_data: np.ndarray, expt_data: dict[tuple[int, int], np.nda
         "0+_2": r"$0^+_2$",
     }
 
-    left_label, right_label = _spectra_panel_labels(c_beta)
+    left_label, right_label = _spectra_panel_labels(int(z) if z is not None else 60)
     ax[0].text(
         0.03,
         0.96,
         left_label,
         transform=ax[0].transAxes,
-        fontsize=16,
+        fontsize=24,
         va="top",
         ha="left",
         bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.8, "pad": 1.5},
@@ -64,7 +64,7 @@ def _plot_spectra(pred_data: np.ndarray, expt_data: dict[tuple[int, int], np.nda
         0.96,
         right_label,
         transform=ax[1].transAxes,
-        fontsize=16,
+        fontsize=24,
         va="top",
         ha="left",
         bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.8, "pad": 1.5},
@@ -119,18 +119,26 @@ def _plot_spectra(pred_data: np.ndarray, expt_data: dict[tuple[int, int], np.nda
     energy_limit = max(2.0, max_energy * 1.1)
 
     for a in ax:
-        a.set_xlabel("Neutron Number", fontsize=16)
-        a.set_ylabel("Energy [MeV]", fontsize=16)
-        a.legend(loc="best", fontsize=12)
+        a.set_xlabel("Neutron Number", fontsize=26)
         a.grid(True, linestyle='--', alpha=0.5)
-        a.tick_params(axis="both", which="major", labelsize=16)
+        a.tick_params(axis="both", which="major", labelsize=20)
         a.xaxis.set_major_locator(MaxNLocator(integer=True))
         a.set_ylim(bottom=0.0)
 
-    # Match Model1 behavior: keep the expt panel with fixed scale in the base plot.
+    # 共有Y軸なので右側は左目盛ラベルを隠す
+    ax[1].tick_params(labelleft=False)
+    ax[0].set_ylabel("Energy [MeV]", fontsize=24)
+
+    # 凡例は左パネルのみ
+    handles, labels = ax[0].get_legend_handles_labels()
+    if len(handles) > 0:
+        ax[0].legend(loc="best", fontsize=16)
+
+    # Base plot は 0-2 MeV を表示。
+    ax[0].set_ylim(0.0, 2.0)
     ax[1].set_ylim(0.0, 2.0)
 
-    fig.tight_layout()
+    fig.subplots_adjust(left=0.10, right=0.98, bottom=0.20, top=0.97, wspace=0.0)
     return fig, energy_limit
 
 def _plot_ratio(pred_data: np.ndarray, expt_data: dict[tuple[int, int], np.ndarray], panel_label: str | None = None) -> plt.Figure:
@@ -206,10 +214,10 @@ def _plot_params(pred_data: np.ndarray, element_name: str = "", labels: dict[str
     # Match Model1 default limits when caller does not pass custom limits.
     if lims is None:
         lims = {
-            "eps": (0.0, 3.5),
-            "kappa": (-1.0, 0.0),
-            "chi_pi": (-1.5, 0.0),
-            "chi_n": (-1.5, 0.0),
+            "eps": (0.0, 2.0),
+            "kappa": (-0.6, 0.0),
+            "chi_pi": (-2.0, 0.0),
+            "chi_n": (-2.0, 0.0),
         }
 
     color_map = {60: "blue", 62: "red", 64: "green"}
@@ -235,32 +243,20 @@ def _plot_params(pred_data: np.ndarray, element_name: str = "", labels: dict[str
                 continue
 
             symbol = CONFIG["elements"].get(int(z), f"Z={z}")
-            if combined:
-                c = color_map.get(int(z), ["blue", "red", "green"][j % 3])
-                ls = line_map.get(int(z), ["-", "--", ":"][j % 3])
-                mk = marker_map.get(int(z), ["o", "s", "^"][j % 3])
-                ax.plot(
-                    n_nums[valid],
-                    vals[valid],
-                    marker=mk,
-                    linestyle=ls,
-                    color=c,
-                    label=symbol,
-                    alpha=0.7,
-                    linewidth=2.6,
-                    markersize=7,
-                )
-            else:
-                # Single-Z mode keeps a simple black line as before, but with Model1-like thickness.
-                ax.plot(
-                    n_nums[valid],
-                    vals[valid],
-                    marker="o",
-                    linestyle="-",
-                    color="black",
-                    linewidth=2.6,
-                    markersize=7,
-                )
+            c = color_map.get(int(z), ["blue", "red", "green"][j % 3])
+            ls = line_map.get(int(z), ["-", "--", ":"][j % 3])
+            mk = marker_map.get(int(z), ["o", "s", "^"][j % 3])
+            ax.plot(
+                n_nums[valid],
+                vals[valid],
+                marker=mk,
+                linestyle=ls,
+                color=c,
+                label=symbol,
+                alpha=0.7,
+                linewidth=2.6,
+                markersize=7,
+            )
 
         ax.text(
             0.03,
@@ -273,15 +269,15 @@ def _plot_params(pred_data: np.ndarray, element_name: str = "", labels: dict[str
             bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.8, "pad": 1.2},
         )
 
-        ax.set_xlabel("Neutron Number N" if i >= 2 else "", fontsize=22)
-        ax.set_ylabel(ylabel, fontsize=22)
+        ax.set_xlabel("Neutron Number N" if i >= 2 else "", fontsize=24)
+        ax.set_ylabel(ylabel, fontsize=26)
         if param_name in lims:
             ax.set_ylim(lims[param_name])
         ax.grid(True, linestyle="--", alpha=0.5)
         ax.tick_params(axis="both", labelsize=18, width=1.4)
         ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-        if combined:
-            ax.legend(fontsize=20)
+        ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
+        ax.legend(fontsize=20)
 
     for j in range(len(keys), len(axes_flat)):
         axes_flat[j].axis("off")
@@ -326,36 +322,32 @@ def main():
 
             element_name = CONFIG["elements"].get(int(z), f"Z={z}")
             save_dir = CONFIG["paths"]["results_dir"] / "images" / pattern_name / str(z)
-            c_beta = CONFIG.get("nuclei", {}).get("fixed_C_beta")
-
-            fig_spectra, spectra_limit = _plot_spectra(z_pred_data, z_expt_data, c_beta=c_beta)
-            save_fig(fig_spectra, "spectra", save_dir, close_fig=False)
+            fig_spectra, spectra_limit = _plot_spectra(z_pred_data, z_expt_data, z=int(z))
             for axis in fig_spectra.axes:
                 axis.set_ylim(0.0, spectra_limit)
-            save_fig(fig_spectra, "spectra_common_scale", save_dir)
+            save_fig(fig_spectra, "spectra", save_dir)
 
             g_level_labels = ["2+_1", "4+_1", "6+_1"]
             g_markers = ['o', 's', '^']
             fig_spectra_g, _ = _plot_spectra(
                 z_pred_data,
                 z_expt_data,
-                c_beta=c_beta,
+                z=int(z),
                 level_labels=g_level_labels,
                 markers=g_markers
             )
-            save_fig(fig_spectra_g, "spectra_g", save_dir, close_fig=False)
             for axis in fig_spectra_g.axes:
                 axis.set_ylim(0.0, spectra_limit)
-            save_fig(fig_spectra_g, "spectra_g_common_scale", save_dir)
+            save_fig(fig_spectra_g, "spectra_g", save_dir)
 
             fig_ratio = _plot_ratio(z_pred_data, z_expt_data, panel_label=_z_panel_label(int(z)))
             save_fig(fig_ratio, "ratio", save_dir)
 
             param_lims = {
-                "eps": (0.0, 3.5),
-                "kappa": (-1.0, 0.0),
-                "chi_pi": (-2.0, 0),
-                "chi_n": (-2.0, 0)
+                "eps": (0.0, 2.0),
+                "kappa": (-0.6, 0.0),
+                "chi_pi": (-1.5, 0.0),
+                "chi_n": (-1.5, 0.0)
             }
             fig_params = _plot_params(z_pred_data, element_name=element_name, lims=param_lims)
             save_fig(fig_params, "params", save_dir)
@@ -366,8 +358,8 @@ def main():
         if np.any(mask):
             filtered_pred_data = pred_data[mask]
             param_lims_combined = {
-                "eps": (0.0, 3.5),
-                "kappa": (-1.0, 0.0),
+                "eps": (0.0, 2.0),
+                "kappa": (-0.6, 0.0),
                 "chi_pi": (-2.0, 0.0),
                 "chi_n": (-2.0, 0.0)
             }
